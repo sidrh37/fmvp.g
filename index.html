@@ -1815,34 +1815,77 @@ function renderRevenueTrendChart() {
   }
   canvas.style.display = ''; empty.style.display = 'none';
 
-  const maxMonths = Math.max(...activeProjects.map(p => p.monthCount));
+  // ── 달력 기준 공통 X축 생성 ──────────────────────────────
+  // 모든 프로젝트의 실제 날짜 범위를 구한다
+  function toYearMonth(launchMonth, offset) {
+    if (!launchMonth) return null;
+    const [y, m] = launchMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + offset);
+    return d.getFullYear() * 100 + (d.getMonth() + 1); // e.g. 202501
+  }
 
-  // 각 프로젝트별 데이터셋 (출시월 기준 YY.MM 라벨 사용)
-  // X축은 공통 인덱스(1~maxMonths)로 맞추고 라벨은 첫 번째 프로젝트 기준
-  const refProj = activeProjects[0];
-  const labels = Array.from({length: maxMonths}, (_, i) => getMonthLabel(refProj, i));
+  let minYM = Infinity, maxYM = -Infinity;
+  activeProjects.forEach(proj => {
+    for (let i = 0; i < proj.monthCount; i++) {
+      const ym = toYearMonth(proj.launchMonth, i);
+      if (ym) { minYM = Math.min(minYM, ym); maxYM = Math.max(maxYM, ym); }
+    }
+  });
 
-  const datasets = activeProjects.map(proj => ({
-    label: proj.name,
-    data: Array.from({length: maxMonths}, (_, i) => {
+  // minYM ~ maxYM 전체 달 목록 생성
+  const allMonths = [];
+  let curY = Math.floor(minYM / 100), curM = minYM % 100;
+  const endY = Math.floor(maxYM / 100), endM = maxYM % 100;
+  while (curY < endY || (curY === endY && curM <= endM)) {
+    allMonths.push(curY * 100 + curM);
+    curM++;
+    if (curM > 12) { curM = 1; curY++; }
+  }
+
+  const labels = allMonths.map(ym => {
+    const y = Math.floor(ym / 100), m = ym % 100;
+    return String(y).slice(2) + '.' + String(m).padStart(2, '0');
+  });
+
+  // ── 각 프로젝트를 달력 X축에 정렬 ────────────────────────
+  const datasets = activeProjects.map(proj => {
+    const data = allMonths.map((ym, _) => {
+      if (!proj.launchMonth) return null;
+      const [ly, lm] = proj.launchMonth.split('-').map(Number);
+      const launchYM = ly * 100 + lm;
+      // 이 달이 해당 프로젝트의 몇 번째 월인지 계산
+      const ymY = Math.floor(ym / 100), ymM = ym % 100;
+      const lY = Math.floor(launchYM / 100), lM = launchYM % 100;
+      const idx = (ymY - lY) * 12 + (ymM - lM);
+      if (idx < 0 || idx >= proj.monthCount) return null;
       const tot = getProjectTotals(proj);
-      return i < tot.length ? (tot[i] || null) : null;
-    }),
-    borderColor: proj.color,
-    backgroundColor: proj.color + '18',
-    fill: false, tension: 0.4,
-    pointRadius: 4, pointBackgroundColor: proj.color, borderWidth: 2,
-    spanGaps: false,
-  }));
+      return tot[idx] || null;
+    });
+    return {
+      label: proj.name,
+      data,
+      borderColor: proj.color,
+      backgroundColor: proj.color + '18',
+      fill: false, tension: 0.4,
+      pointRadius: 4, pointBackgroundColor: proj.color, borderWidth: 2,
+      spanGaps: false,
+    };
+  });
 
-  // 전체 합산 라인 추가
+  // 전체 합산 라인
   if (activeProjects.length > 1) {
-    const totalData = Array.from({length: maxMonths}, (_, i) =>
-      activeProjects.reduce((sum, proj) => {
+    const totalData = allMonths.map(ym => {
+      const sum = activeProjects.reduce((s, proj) => {
+        if (!proj.launchMonth) return s;
+        const [ly, lm] = proj.launchMonth.split('-').map(Number);
+        const ymY = Math.floor(ym / 100), ymM = ym % 100;
+        const idx = (ymY - ly) * 12 + (ymM - lm);
+        if (idx < 0 || idx >= proj.monthCount) return s;
         const tot = getProjectTotals(proj);
-        return sum + (i < tot.length ? (tot[i] || 0) : 0);
-      }, 0) || null
-    );
+        return s + (tot[idx] || 0);
+      }, 0);
+      return sum || null;
+    });
     datasets.push({
       label: '전체 합산',
       data: totalData,
