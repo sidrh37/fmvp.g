@@ -1372,22 +1372,26 @@ function sb() {
 let currentUser = null;
 
 async function initAuth() {
-  // 현재 세션 확인
+  // onAuthStateChange를 먼저 등록 — SIGNED_IN 이벤트를 놓치지 않기 위해
+  sb().auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      onLoggedIn(session.user);
+      // URL 해시/쿼리 정리
+      if (window.location.hash || window.location.search.includes('code=')) {
+        history.replaceState(null, '', window.location.pathname);
+      }
+    } else if (event === 'SIGNED_OUT') {
+      onLoggedOut();
+    }
+  });
+
+  // 이미 세션이 있는 경우 (재방문, 새로고침)
   const { data: { session } } = await sb().auth.getSession();
   if (session) {
     onLoggedIn(session.user);
   } else {
     showLoginOverlay();
   }
-
-  // 로그인 상태 변화 감지
-  sb().auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      onLoggedIn(session.user);
-    } else if (event === 'SIGNED_OUT') {
-      onLoggedOut();
-    }
-  });
 }
 
 function showLoginOverlay() {
