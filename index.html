@@ -2149,14 +2149,13 @@ ${analysisData}
 간결하고 실용적으로 작성해주세요. 게임 업계 맥락에서 조언해주세요.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://vlngdohmihsjgmujawmi.supabase.co/functions/v1/ai-analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify({ prompt })
     });
     const data = await res.json();
     const text = data.content?.map(c => c.text || '').join('') || '분석 결과를 가져오지 못했습니다.';
